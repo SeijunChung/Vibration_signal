@@ -67,7 +67,7 @@ def classification(args):
 
     conv1_channel, conv2_channel, conv3_channel = 32, 64, 128
 
-    conv1_kernelsize, conv2_kernelsize, conv3_kernelsize = 17, 21, 17
+    conv1_kernelsize, conv2_kernelsize, conv3_kernelsize = 7, 5, 3
     conv1_pad, conv2_pad, conv3_pad = int((conv1_kernelsize - 1) / 2), int((conv2_kernelsize - 1) / 2), int((conv3_kernelsize - 1) / 2)
     conv1_stride, conv2_stride, conv3_stride = 1, 1, 1
 
