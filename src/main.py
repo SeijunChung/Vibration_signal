@@ -32,8 +32,6 @@ def classification(args):
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    pixel_wise = True
-
     # Weights and Plots Path #
     paths = [args.weights_path, args.plots_path]
     for path in paths:
