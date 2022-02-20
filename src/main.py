@@ -6,6 +6,7 @@ import numpy as np
 import zipfile
 import pandas as pd
 from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error, f1_score
+import matplotlib.pyplot as plt
 
 import torch
 import torchvision
@@ -44,11 +45,12 @@ def classification(args):
 
     # Constants #
     best_val_loss = 100
+    best_f1_score = 0
     best_val_improv = 0
 
     # Prepare Network #
     if args.model == 'cnn':
-        model = CNN(args.input_size, args.hidden_size).to(device)
+        model = CNN(args.input_size, args.hidden_size, args.kernel_size).to(device)
     elif args.model == 'drnn':
         model = DRNN_Classifier(n_inputs=2, n_hidden=256, n_layers=7, n_classes=10).to(device)
     else:
@@ -111,7 +113,7 @@ def classification(args):
             df = pd.read_csv(fp)
             data = df[df.columns[1:3]].values
             # print(f"{fp.split('/')[-1].split('.')[0]} length :  {data.shape[0]}")
-            hop = int(data.shape[0] // 50000)
+            hop = int(data.shape[0] // 80000)
 
             x = split_sequence_classification(data, args.input_size, hop)
             y = np.empty(x.shape[0])
@@ -162,7 +164,6 @@ def classification(args):
             optim_scheduler.step()
 
             # Validation #
-
             model.eval()
             correct = 0
             total = 0
@@ -189,25 +190,38 @@ def classification(args):
                     labels += label.detach().cpu().numpy().tolist()
                     total += label.size(0)
                     correct += pred_val.eq(label).sum().item()
+                curr_f1_score = f1_score(labels, pred_vals, average="macro")
 
             if (epoch + 1) % args.print_every == 0:
 
                 # Print Statistic evaluation #
                 print('Loss: %.4f | ACC.: %.3f%% (%d/%d) | F1-Score(Macro): %.6f%%' % (np.average(val_losses), 100. * correct / total, correct, total, f1_score(labels, pred_vals, average="macro")))
 
-                # Save the model only if validation loss decreased #
-                curr_val_loss = np.average(val_losses)
+                # # Save the model only if validation loss decreased #
+                # curr_val_loss = np.average(val_losses)
+                #
+                # if curr_val_loss < best_val_loss:
+                #     best_val_loss = min(curr_val_loss, best_val_loss)
+                #     torch.save(model.state_dict(), os.path.join(args.weights_path, f'Best_{model.__class__.__name__}_model.pkl'))
+                #
+                #     print("Best model is saved!\n")
+                #     best_val_improv = 0
+                #
+                # elif curr_val_loss >= best_val_loss:
+                #     best_val_improv += 1
+                #     print("Best Validation has not improved for {} epochs.\n".format(best_val_improv))
 
-                if curr_val_loss < best_val_loss:
-                    best_val_loss = min(curr_val_loss, best_val_loss)
+                if curr_f1_score > best_f1_score:
+                    best_f1_score = curr_f1_score
                     torch.save(model.state_dict(), os.path.join(args.weights_path, f'Best_{model.__class__.__name__}_model.pkl'))
 
                     print("Best model is saved!\n")
                     best_val_improv = 0
 
-                elif curr_val_loss >= best_val_loss:
+                elif curr_f1_score <= best_f1_score:
                     best_val_improv += 1
                     print("Best Validation has not improved for {} epochs.\n".format(best_val_improv))
+
 
     elif args.mode == 'test':
         pred_tests = []
@@ -540,13 +554,12 @@ if __name__ == "__main__":
     parser.add_argument('--mode', type=str, default="train", choices=['train', 'test', "lrp"])
     parser.add_argument('--model', type=str, default='cnn', choices=['dnn', 'cnn', 'drnn', 'resnet50', 'resnet50_2nd', 'resnet50_3rd', 'resnet50_4th', 'attn_resnet'])
     parser.add_argument('--input_size', type=int, default=128, help='input_size')
-    parser.add_argument('--hidden_size', type=int, default=2048, help='hidden_size')
+    parser.add_argument('--hidden_size', type=list, default=[256, 1024, 64], help='hidden_size')
     parser.add_argument('--num_layers', type=int, default=4, help='num_layers')
     parser.add_argument('--output_size', type=int, default=10, help='output_size')
     parser.add_argument('--bidirectional', type=bool, default=False, help='use bidirectional or not')
     parser.add_argument('--qkv', type=int, default=5, help='dimension for query, key and value')
-    parser.add_argument('--weight_history', type=float, default=0.2)
-    parser.add_argument('--weight_context', type=float, default=0.8)
+    parser.add_argument('--kernel_size', type=list, default=[5, 5, 3])
     parser.add_argument('--data_path', type=str, default='../data/', help='which data to use')
     parser.add_argument('--weights_path', type=str, default='../results/weights/', help='weights path')
     parser.add_argument('--plots_path', type=str, default='../results/plots/', help='plots path')

@@ -101,46 +101,41 @@ class DNN(nn.Module):
 
 class CNN(nn.Module):
     """Convolutional Neural Networks"""
-    def __init__(self, input_size, hidden_dim):
+    def __init__(self, input_size, hidden_dims, kernel_sizes):
         super(CNN, self).__init__()
         self.input_size = input_size
-        self.hidden_dim = hidden_dim
-        self.conv1 = nn.Conv1d(in_channels=2, out_channels=256, kernel_size=5, padding=2)
-        self.conv2 = nn.Conv1d(in_channels=256, out_channels=self.hidden_dim, kernel_size=7, padding=3)
-        self.conv3 = nn.Conv1d(in_channels=self.hidden_dim, out_channels=1, kernel_size=5, padding=2)
+        self.hidden_dims = hidden_dims
+        self.conv1 = nn.Conv1d(in_channels=2, out_channels=self.hidden_dims[0], kernel_size=kernel_sizes[0], padding=int((kernel_sizes[0]-1)/2))
+        self.conv2 = nn.Conv1d(in_channels=self.hidden_dims[0], out_channels=self.hidden_dims[1], kernel_size=kernel_sizes[1], padding=int((kernel_sizes[1]-1)/2))
+        self.conv3 = nn.Conv1d(in_channels=self.hidden_dims[1], out_channels=self.hidden_dims[2], kernel_size=kernel_sizes[2], padding=int((kernel_sizes[2]-1)/2))
         self.max_pool1 = nn.MaxPool1d(2)
         self.max_pool2 = nn.MaxPool1d(2)
         self.max_pool3 = nn.MaxPool1d(2)
-        self.bn1 = nn.BatchNorm1d(256)
-        self.bn2 = nn.BatchNorm1d(self.hidden_dim)
-        self.bn3 = nn.BatchNorm1d(1)
+        self.avg_pool = nn.AvgPool1d(64)
+        self.bn1 = nn.BatchNorm1d(self.hidden_dims[0])
+        self.bn2 = nn.BatchNorm1d(self.hidden_dims[1])
+        self.bn3 = nn.BatchNorm1d(self.hidden_dims[2])
         self.flatten = nn.Flatten()
         self.relu = nn.LeakyReLU(inplace=True)
         self.fc = nn.Linear(16, 10, bias=True)
 
     def forward(self, x):
         out = self.conv1(x)
-        # print("Conv1 out:", out.size())
         out = self.bn1(out)
+        out = self.relu(out)
         out = self.max_pool1(out)
-        # print("maxpool out:", out.size())
-        out = self.relu(out)
         out = self.conv2(out)
-        # print("conv2 out:", out.size())
         out = self.bn2(out)
+        out = self.relu(out)
         out = self.max_pool2(out)
-        # print("maxpool out:", out.size())
-        out = self.relu(out)
         out = self.conv3(out)
-        # print("conv3 out:", out.size())
         out = self.bn3(out)
-        out = self.max_pool3(out)
-        # print("maxpool out:", out.size())
         out = self.relu(out)
+        out = self.max_pool3(out)
+        # print(out.size())
+        out = self.avg_pool(out.transpose(1,2))
         out = self.flatten(out)
-        # print("flatten out:", out.size())
         out = self.fc(out.squeeze(1))
-        # print("fc out:", out.size())
         return out
 
 
