@@ -69,7 +69,7 @@ def classification(args):
 
     conv1_channel, conv2_channel, conv3_channel = 32, 64, 128
 
-    conv1_kernelsize, conv2_kernelsize, conv3_kernelsize = 7, 5, 3
+    conv1_kernelsize, conv2_kernelsize, conv3_kernelsize = 5, 3, 3
     conv1_pad, conv2_pad, conv3_pad = int((conv1_kernelsize - 1) / 2), int((conv2_kernelsize - 1) / 2), int((conv3_kernelsize - 1) / 2)
     conv1_stride, conv2_stride, conv3_stride = 1, 1, 1
 
@@ -551,7 +551,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=256, help='mini-batch size')
     parser.add_argument('--hop_length', type=int, default=128, help='hop length')
     parser.add_argument('--task', type=str, default='classification', choices=['classification', 'regression'])
-    parser.add_argument('--mode', type=str, default="train", choices=['train', 'test', "lrp"])
+    parser.add_argument('--mode', type=str, default="lrp", choices=['train', 'test', "lrp"])
     parser.add_argument('--model', type=str, default='cnn', choices=['dnn', 'cnn', 'drnn', 'resnet50', 'resnet50_2nd', 'resnet50_3rd', 'resnet50_4th', 'attn_resnet'])
     parser.add_argument('--input_size', type=int, default=128, help='input_size')
     parser.add_argument('--hidden_size', type=list, default=[256, 1024, 64], help='hidden_size')
@@ -559,15 +559,15 @@ if __name__ == "__main__":
     parser.add_argument('--output_size', type=int, default=10, help='output_size')
     parser.add_argument('--bidirectional', type=bool, default=False, help='use bidirectional or not')
     parser.add_argument('--qkv', type=int, default=5, help='dimension for query, key and value')
-    parser.add_argument('--kernel_size', type=list, default=[5, 5, 3])
+    parser.add_argument('--kernel_size', type=list, default=[5, 3, 3])
     parser.add_argument('--data_path', type=str, default='../data/', help='which data to use')
     parser.add_argument('--weights_path', type=str, default='../results/weights/', help='weights path')
     parser.add_argument('--plots_path', type=str, default='../results/plots/', help='plots path')
     parser.add_argument('--train_split', type=float, default=0.9, help='train_split')
     parser.add_argument('--test_split', type=float, default=0.1, help='test_split')
-    parser.add_argument('--num_epochs', type=int, default=100, help='total epoch')
+    parser.add_argument('--num_epochs', type=int, default=300, help='total epoch')
     parser.add_argument('--print_every', type=int, default=1, help='print statistics for every default epoch')
-    parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
+    parser.add_argument('--lr', type=float, default=1e-2, help='learning rate')
     parser.add_argument('--lr_scheduler', type=str, default='cosine', help='learning rate scheduler', choices=['step', 'plateau', 'cosine'])
 
     config = parser.parse_args()
