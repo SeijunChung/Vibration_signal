@@ -30,7 +30,7 @@ classes = {"1st_Normal": 0, "1st_Unbalance": 1, "1st_Looseness": 2, "1st_high": 
 
 # Device Configuration #
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+device = 'cuda:7' if torch.cuda.is_available() else 'cpu'
 
 # Constants #
 best_val_loss = 100
@@ -42,7 +42,7 @@ mode = "ptap"
 train_split, batch_size = 0.9, 256
 input_size = 128
 conv_channels = [256, 1024, 64]
-conv_kernelsizes = [7, 5, 3]
+conv_kernelsizes = [5, 3, 3]
 
 # Prepare Network #
 if model == 'cnn':
@@ -196,7 +196,7 @@ elif mode == 'ptap':
     # img.save("../results/classification3.png")
 
     conv_channels = [256, 1024, 64]
-    conv_kernelsizes = [7, 5, 3]
+    conv_kernelsizes = [5, 3, 3]
     conv_paddings = [int((conv_kernelsize - 1) / 2) for conv_kernelsize in conv_kernelsizes]
     conv_strides = [1, 1, 1]
     pool_sizes = [2, 2, 2]
@@ -280,7 +280,7 @@ elif mode == 'ptap':
             # Forward Data #
             output = model(data)
 
-            intermediate_output = activation['max_pool3'] if i == 0 else torch.concat(
+            intermediate_output = activation['max_pool3'] if i == 0 else torch.cat(
                 (intermediate_output, activation['max_pool3']), dim=0)
 
             # Calculate Loss #
