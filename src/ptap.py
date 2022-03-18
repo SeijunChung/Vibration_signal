@@ -10,8 +10,9 @@ from PIL import ImageDraw
 from PIL import ImageFont
 from sklearn.metrics import f1_score
 from utils import make_dirs, get_lr_scheduler, split_sequence_classification, data_loader
-from models import CNN, DRNN_Classifier
+from models import CNN, DRNN_Classifier, GuidedBackpropRelu, GuidedReluModel, CAM
 import torch
+import torch.nn as nn
 from captum.attr import LayerLRP
 from sklearn.preprocessing import normalize
 
@@ -38,11 +39,11 @@ best_f1_score = 0
 best_val_improv = 0
 model = "cnn"
 lr_scheduler = "cosine"
-mode = "ptap"
+mode = "gradcam"
 train_split, batch_size = 0.9, 256
 input_size = 128
 conv_channels = [256, 1024, 64]
-conv_kernelsizes = [5, 3, 3]
+conv_kernelsizes = [7, 5, 3]
 
 # Prepare Network #
 if model == 'cnn':
@@ -140,9 +141,62 @@ if mode == 'lrp':
     ax.set_xticklabels(x_axis_labels)
     plt.show()
 
+elif mode == "gradcam":
+    data_temp = pd.read_csv("../data/train/train_1st_Normal.csv", index_col=False, float_precision="round_trip", dtype=object)
+    data_temp = data_temp[["1st_Normal_c1", "1st_Normal_c2"]].values.astype(np.float32)
+
+    for i, fp in enumerate(glob.glob(data_path + "train/*.csv")):
+        label = fp.split("/")[-1].split(".")[0][6:]
+        df = pd.read_csv(fp)
+        data = df[df.columns[1:3]].values
+        # print(f"{fp.split('/')[-1].split('.')[0]} length :  {data.shape[0]}")
+        hop = int(data.shape[0] // 1000)
+
+        x = split_sequence_classification(data, input_size, hop)
+        y = np.empty(x.shape[0])
+        y[:] = int(classes[label])
+        print(f"The Number of Samples: {label} ~> {x.shape[0]}")
+        train_x = x if i == 0 else np.append(train_x, x, axis=0)
+        train_y = y if i == 0 else np.append(train_y, y, axis=0)
+
+    train_loader, val_loader = data_loader(train_x, train_y, train_split, batch_size, "train", classes)
+
+    # Load weights saved #
+    model.load_state_dict(torch.load(os.path.join(weights_path, f'Best_{model.__class__.__name__}_model.pkl')))
+
+    # Validation #
+    model.eval()
+    correct = 0
+    total = 0
+
+    guided_relu = GuidedBackpropRelu.apply
+    guide = GuidedReluModel(model, nn.ReLU, guided_relu)
+    cam = CAM(guide)
+    guide.reset_output()
+
+    for image, label in test_loader:
+        x = Variable(image, requires_grad=True).to(device, dtype=torch.float32)
+        y_ = Variable(label).to(device, dtype=torch.long)
+
+        output = guide.forward(x)
+        output = torch.index_select(output, dim=1, index=y_)
+        output = torch.sum(output)
+        output.backward(retain_graph=True)
+
+        for j in range(20):
+            out = cam.get_cam(j)
+            guided_img = guide.get_visual(j, x)
+            cam.visualize(out, guided_img, x[j])
+
+        break
+
+
+
+
+
 elif mode == 'ptap':
-    # data_temp = pd.read_csv("../data/train/train_1st_Normal.csv", index_col=False, float_precision="round_trip", dtype=object)
-    # data_temp = data_temp[["1st_Normal_c1", "1st_Normal_c2"]].values.astype(np.float32)
+    data_temp = pd.read_csv("../data/train/train_1st_Normal.csv", index_col=False, float_precision="round_trip", dtype=object)
+    data_temp = data_temp[["1st_Normal_c1", "1st_Normal_c2"]].values.astype(np.float32)
 
     # Regression Figure
     # start = 10544*10
@@ -155,13 +209,14 @@ elif mode == 'ptap':
     # ax[0].xaxis.set_visible(False)
     # ax[0].set_yticks([])
     # ax[1].set_yticks([])
-    # # Create a Rectangle patch
-    # rect1 = patches.Rectangle((0, -1), 1054*3, 2, linestyle="--", linewidth=2, edgecolor='darkorange', facecolor='none')
-    # rect2 = patches.Rectangle((0, -8), 1054*3, 16, linestyle="--", linewidth=2, edgecolor='darkorange', facecolor='none')
-    # rect3 = patches.Rectangle((1054 * 3, -8), 1054, 16, linestyle="--", linewidth=2, edgecolor='red', facecolor='lightcoral', fill=True)
+
+    # Create a Rectangle patch
+    # rect1 = patches.Rectangle((0, -1), 1054*3, 2, linestyle="--", linewidth=3, edgecolor='darkorange', facecolor='none')
+    # rect2 = patches.Rectangle((0, -8), 1054*3, 16, linestyle="--", linewidth=3, edgecolor='darkorange', facecolor='none')
+    # rect3 = patches.Rectangle((1054 * 3, -8), 1054, 16, linestyle="--", linewidth=3, edgecolor='red', facecolor='lightcoral', fill=True)
     # rect4 = patches.Rectangle((1054 * 3, -1), 1054, 2, linestyle="--", linewidth=2, edgecolor='dodgerblue', facecolor='none')
-    #
-    # # Add the patch to the Axes
+
+    # Add the patch to the Axes
     # ax[0].add_patch(rect1)
     # ax[0].add_patch(rect4)
     # ax[1].add_patch(rect2)
@@ -183,20 +238,22 @@ elif mode == 'ptap':
     # ax[1].set_yticks([])
     # plt.tight_layout()
     # plt.savefig("../results/classification.png", dpi=100)
-    # # Open an Image
+
+    # Open an Image
     # img = Image.open('../results/classification.png')
-    # # Call draw Method to add 2D graphics in an image
+    # Call draw Method to add 2D graphics in an image
     # I1 = ImageDraw.Draw(img)
-    #
-    # # Custom font style and font size
-    # myFont = ImageFont.truetype("../arial.ttf", 150)
-    # # Add Text to an image
+
+    # Custom font style and font size
+    # myFont = ImageFont.truetype("../Arial.ttf", 150)
+    # Add Text to an image
     # I1.text((320, 60), "?", font=myFont, fill=(255, 0, 0), align="center")
-    # # Save the edited image
-    # img.save("../results/classification3.png")
+    # Save the edited image
+    # img.save("../results/classification2.png")
+    # quit()
 
     conv_channels = [256, 1024, 64]
-    conv_kernelsizes = [5, 3, 3]
+    conv_kernelsizes = [7, 5, 3]
     conv_paddings = [int((conv_kernelsize - 1) / 2) for conv_kernelsize in conv_kernelsizes]
     conv_strides = [1, 1, 1]
     pool_sizes = [2, 2, 2]
@@ -206,7 +263,6 @@ elif mode == 'ptap':
 
     def _next(length, size, pad, stride):
         return int((length + 2 * pad - size + stride) / stride)
-
 
     input_len = 128
     l1_conv_len = _next(input_len, conv_kernelsizes[0], conv_paddings[0], conv_strides[0])
