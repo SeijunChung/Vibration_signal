@@ -69,7 +69,7 @@ def classification(args):
 
     conv1_channel, conv2_channel, conv3_channel = 32, 64, 128
 
-    conv1_kernelsize, conv2_kernelsize, conv3_kernelsize = 7, 5, 3
+    conv1_kernelsize, conv2_kernelsize, conv3_kernelsize = 9, 5, 3
     conv1_pad, conv2_pad, conv3_pad = int((conv1_kernelsize - 1) / 2), int((conv2_kernelsize - 1) / 2), int((conv3_kernelsize - 1) / 2)
     conv1_stride, conv2_stride, conv3_stride = 1, 1, 1
 
@@ -87,7 +87,7 @@ def classification(args):
     l2_pool_len = _next(l2_conv_len, pool2_size, pool2_pad, pool2_stride)
     l3_conv_len = _next(l2_pool_len, conv3_kernelsize, conv3_pad, conv3_stride)
     l3_pool_len = _next(l3_conv_len, pool3_size, pool3_pad, pool3_stride)
-    print(l1_conv_len, l1_pool_len, l2_conv_len, l2_pool_len, l3_conv_len, l3_pool_len)
+    # print(l1_conv_len, l1_pool_len, l2_conv_len, l2_pool_len, l3_conv_len, l3_pool_len)
 
     Receptive_Field_index3 = []
     for node in range(l3_pool_len):
@@ -104,7 +104,6 @@ def classification(args):
         input_start = l1_conv_start * conv1_stride - conv1_pad
         input_end = l1_conv_end * conv1_stride - conv1_pad + conv1_kernelsize - 1
         Receptive_Field_index3.append(np.arange(input_start, input_end + 1))
-    print(Receptive_Field_index3)
 
     # Train and Validation #
     if args.mode == 'train':
@@ -213,7 +212,7 @@ def classification(args):
 
                 if curr_f1_score > best_f1_score:
                     best_f1_score = curr_f1_score
-                    torch.save(model.state_dict(), os.path.join(args.weights_path, f'Best_{model.__class__.__name__}_model.pkl'))
+                    torch.save(model.state_dict(), os.path.join(args.weights_path, f'Best_{model.__class__.__name__}_model_4th.pkl'))
 
                     print("Best model is saved!\n")
                     best_val_improv = 0
@@ -222,11 +221,10 @@ def classification(args):
                     best_val_improv += 1
                     print("Best Validation has not improved for {} epochs.\n".format(best_val_improv))
 
-
     elif args.mode == 'test':
         pred_tests = []
         # Load the Model Weight #
-        model.load_state_dict(torch.load(os.path.join(args.weights_path, f'Best_{model.__class__.__name__}_model.pkl')))
+        model.load_state_dict(torch.load(os.path.join(args.weights_path, f'Best_{model.__class__.__name__}_model_4th.pkl')))
         label = pd.read_csv(args.data_path + "result_test_classification.csv", index_col=False)
 
         inferenceset = np.load(args.data_path + "test/inference_set_classification.npy")
@@ -551,7 +549,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=256, help='mini-batch size')
     parser.add_argument('--hop_length', type=int, default=128, help='hop length')
     parser.add_argument('--task', type=str, default='classification', choices=['classification', 'regression'])
-    parser.add_argument('--mode', type=str, default="test", choices=['train', 'test', "lrp"])
+    parser.add_argument('--mode', type=str, default="train", choices=['train', 'test', "lrp"])
     parser.add_argument('--model', type=str, default='cnn', choices=['dnn', 'cnn', 'drnn', 'resnet50', 'resnet50_2nd', 'resnet50_3rd', 'resnet50_4th', 'attn_resnet'])
     parser.add_argument('--input_size', type=int, default=128, help='input_size')
     parser.add_argument('--hidden_size', type=list, default=[256, 1024, 64], help='hidden_size')
@@ -559,7 +557,7 @@ if __name__ == "__main__":
     parser.add_argument('--output_size', type=int, default=10, help='output_size')
     parser.add_argument('--bidirectional', type=bool, default=False, help='use bidirectional or not')
     parser.add_argument('--qkv', type=int, default=5, help='dimension for query, key and value')
-    parser.add_argument('--kernel_size', type=list, default=[7, 5, 3])
+    parser.add_argument('--kernel_size', type=list, default=[9, 5, 3])
     parser.add_argument('--data_path', type=str, default='../data/', help='which data to use')
     parser.add_argument('--weights_path', type=str, default='../results/weights/', help='weights path')
     parser.add_argument('--plots_path', type=str, default='../results/plots/', help='plots path')

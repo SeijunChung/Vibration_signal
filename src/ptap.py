@@ -43,7 +43,7 @@ mode = "gradcam"
 train_split, batch_size = 0.9, 256
 input_size = 128
 conv_channels = [256, 1024, 64]
-conv_kernelsizes = [7, 5, 3]
+conv_kernelsizes = [9, 5, 3]
 
 # Prepare Network #
 if model == 'cnn':
@@ -113,7 +113,7 @@ def select_greedy_protos(K, m):
 
 if mode == 'lrp':
     # Load the Model Weight #
-    model.load_state_dict(torch.load(os.path.join(weights_path, f'Best_{model.__class__.__name__}_model.pkl')))
+    model.load_state_dict(torch.load(os.path.join(weights_path, f'Best_{model.__class__.__name__}_model_2th.pkl')))
     label = pd.read_csv(data_path + "result_test_classification.csv", index_col=False)
 
     inferenceset = np.load(data_path + "test/inference_set_classification.npy")
@@ -162,36 +162,37 @@ elif mode == "gradcam":
     train_loader, val_loader = data_loader(train_x, train_y, train_split, batch_size, "train", classes)
 
     # Load weights saved #
-    model.load_state_dict(torch.load(os.path.join(weights_path, f'Best_{model.__class__.__name__}_model.pkl')))
+    model.load_state_dict(torch.load(os.path.join(weights_path, f'Best_{model.__class__.__name__}_model_4th.pkl')))
+
+    # for m in model.modules():
+    #     print(m)
 
     # Validation #
-    model.eval()
-    correct = 0
-    total = 0
-
     guided_relu = GuidedBackpropRelu.apply
     guide = GuidedReluModel(model, nn.ReLU, guided_relu)
     cam = CAM(guide)
     guide.reset_output()
 
-    for image, label in test_loader:
-        x = Variable(image, requires_grad=True).to(device, dtype=torch.float32)
-        y_ = Variable(label).to(device, dtype=torch.long)
-
-        output = guide.forward(x)
-        output = torch.index_select(output, dim=1, index=y_)
+    # Validation #
+    for i, (data, label) in enumerate(val_loader):
+        # Prepare Data #
+        data = data.to(device, dtype=torch.float32)
+        data.requires_grad = True
+        label = label.to(device, dtype=torch.long)
+        # Forward Data #
+        output = guide.forward(data)
+        output = torch.index_select(output, dim=1, index=label)
         output = torch.sum(output)
         output.backward(retain_graph=True)
 
         for j in range(20):
             out = cam.get_cam(j)
-            guided_img = guide.get_visual(j, x)
-            cam.visualize(out, guided_img, x[j])
+            # print(out.size())
+            guided_backprop = guide.get_visual(j)
+            # print(guided_img.size())
+            cam.visualize(out, guided_backprop, data[j], label[j])
 
         break
-
-
-
 
 
 elif mode == 'ptap':
@@ -253,7 +254,7 @@ elif mode == 'ptap':
     # quit()
 
     conv_channels = [256, 1024, 64]
-    conv_kernelsizes = [7, 5, 3]
+    conv_kernelsizes = [9, 5, 3]
     conv_paddings = [int((conv_kernelsize - 1) / 2) for conv_kernelsize in conv_kernelsizes]
     conv_strides = [1, 1, 1]
     pool_sizes = [2, 2, 2]
@@ -407,7 +408,6 @@ elif mode == 'ptap':
                                                                                    axis=0)
 
     # display_n = 32
-    #
     # column = 4
     # row = int((display_n - 1) / column) + 1
 
@@ -416,7 +416,6 @@ elif mode == 'ptap':
     # gs.update(wspace=0, hspace=0)
 
     # samples = np.random.choice(len(subsequences), display_n, replace=False)
-    #
     # for i, n in enumerate(samples):
     #     ax = plt.subplot(gs[i])
     #     ax.plot(subsequences[n, 0, :], color='black', alpha=2.5)

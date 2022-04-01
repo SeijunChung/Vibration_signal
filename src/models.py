@@ -3,15 +3,22 @@ import torch.nn as nn
 import drnn
 import torchvision
 import torch.autograd as autograd
+import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import torch.optim as optim
 import torch.utils.data as Data
-from torch.autograd import Variable
 from convolution_lstm import ConvLSTM
 from torch.autograd import Function
+from skimage.transform import resize
+from sklearn.preprocessing import MinMaxScaler
 
 
 device = 'cuda:7' if torch.cuda.is_available() else 'cpu'
+
+
+def minmax_norm(x):
+    return (x - x.min()) / x.max() - x.min()
 
 
 class GuidedBackpropRelu(Function):
@@ -38,38 +45,42 @@ class GuidedReluModel(nn.Module):
         self.layers = []
         self.output = []
 
-        for m in self.model.modules():
+        for i, m in enumerate(self.model.modules()):
             if isinstance(m, self.to_be_replaced):
                 self.layers.append(self.replace_to)
-                # self.layers.append(m)
-            elif isinstance(m, nn.Conv2d):
+            elif isinstance(m, nn.Conv1d):
                 self.layers.append(m)
-            elif isinstance(m, nn.BatchNorm2d):
+            elif isinstance(m, nn.BatchNorm1d):
                 self.layers.append(m)
             elif isinstance(m, nn.Linear):
                 self.layers.append(m)
             elif isinstance(m, nn.AvgPool2d):
+                self.layers.append(m)
+            elif isinstance(m, nn.MaxPool1d):
                 self.layers.append(m)
 
     def reset_output(self):
         self.output = []
 
     def hook(self, grad):
-        out = grad[:, 0, :, :].cpu().data
+        out = grad.cpu().data
         self.output.append(out)
 
-    def get_visual(self, idx, original_img):
+    def get_visual(self, idx):
+        print("gradient:", self.output[0].size())
         grad = self.output[0][idx]
         return grad
 
     def forward(self, x):
         out = x
+        print("self.hook:", self.hook)
         out.register_hook(self.hook)
-        for i in self.layers[:-3]:
+        for i, m in enumerate(self.layers):
+            print(f"layer {i+1}:", m)
+        for ind, i in enumerate(self.layers[:-1]):
             out = i(out)
         out = out.view(out.size()[0], -1)
-        for j in self.layers[-3:]:
-            out = j(out)
+        out = self.layers[-1](out)
         return out
 
 
@@ -77,7 +88,7 @@ class CAM():
     def __init__(self, model):
         self.gradient = []
         self.model = model
-        self.h = self.model.model.layer[-2].register_backward_hook(self.save_gradient)
+        self.h = self.model.model.layer[-1].register_backward_hook(self.save_gradient)
 
     def save_gradient(self, *args):
         grad_input = args[1]
@@ -95,38 +106,91 @@ class CAM():
         # x[x<torch.max(x)]=-1
         return x
 
-    def visualize(self, cam_img, guided_img, img_var):
+    def normalize_gradcam(self, x):
+        x = 2 * (x - np.min(x)) / (np.max(x) - np.min(x) + 1e-8) - 1
+        # x[x<torch.max(x)]=-1
+        return x
+
+    def visualize(self, cam_img, guided_img, time_series, label):
         guided_img = guided_img.numpy()
-        # cam_img = resize(cam_img.cpu().data.numpy(), output_shape=(28, 28))
-        x = img_var[0, :, :].cpu().data.numpy()
+        cam_img = resize(cam_img.cpu().data.numpy(), output_shape=(128,))
+        x = time_series.cpu().data.numpy()
+        y = label.cpu().numpy()
+        # print("cam_img:", np.min(cam_img), np.max(cam_img))
+        # print("guided_img:", guided_img[0], np.min(guided_img), np.max(guided_img))
+        # print("cam X Guided_img.shape:", (guided_img * cam_img).shape)
 
-        fig = plt.figure(figsize=(20, 12))
+        fig, ax = plt.subplots(7, 1, figsize=(12, 10), sharex=True)
+        ax[0].set_title(f"Original time-series, Label {y}")
+        ax[0].plot(x[0])
+        ax[0].set_ylabel("Channel 1", fontsize=12, weight="bold")
+        ax[1].plot(x[1])
+        ax[1].set_ylabel("Channel 2", fontsize=12, weight="bold")
+        ax[0].xaxis.set_visible(False)
+        ax[0].set_yticks([])
+        ax[1].set_yticks([])
 
-        plt.subplot(1, 4, 1)
-        plt.title("Original Image")
-        plt.imshow(x, cmap="gray")
+        norm = matplotlib.colors.Normalize(vmin=np.min(cam_img), vmax=np.max(cam_img))
+        ax[2].set_title("Class Activation Map")
+        ax[2].scatter(np.arange(0, len(cam_img)), cam_img, color=plt.cm.bwr(norm(cam_img)), edgecolor='none')
+        ax[2].set_ylabel("CAM", fontsize=12, weight="bold")
+        ax[2].xaxis.set_visible(False)
+        ax[2].set_yticks([])
 
-        plt.subplot(1, 4, 2)
-        plt.title("Class Activation Map")
-        plt.imshow(cam_img)
+        norm1 = matplotlib.colors.Normalize(vmin=np.min(guided_img[0]), vmax=np.max(guided_img[0]))
+        norm2 = matplotlib.colors.Normalize(vmin=np.min(guided_img[1]), vmax=np.max(guided_img[1]))
+        ax[3].set_title("Guided Backpropagation")
+        ax[3].scatter(np.arange(0, len(guided_img[0])), guided_img[0], color=plt.cm.Greys(norm1(guided_img[0])), edgecolor='none')
+        ax[3].set_ylabel("Channel 1", fontsize=12, weight="bold")
+        ax[4].scatter(np.arange(0, len(guided_img[1])), guided_img[1], color=plt.cm.Greys(norm2(guided_img[1])), edgecolor='none')
+        ax[4].set_ylabel("Channel 2", fontsize=12, weight="bold")
+        ax[3].xaxis.set_visible(False)
+        ax[3].set_yticks([])
+        ax[4].set_yticks([])
 
-        plt.subplot(1, 4, 3)
-        plt.title("Guided Backpropagation")
-        plt.imshow(guided_img, cmap='gray')
+        gradcam = cam_img * guided_img
 
-        plt.subplot(1, 4, 4)
-        plt.title("Guided x CAM")
-        plt.imshow(guided_img * cam_img, cmap="gray")
+        gradcam_norm1 = self.normalize_gradcam(gradcam[0])
+        gradcam_norm2 = self.normalize_gradcam(gradcam[1])
+
+        norm1 = matplotlib.colors.Normalize(vmin=np.min(gradcam_norm1), vmax=np.max(gradcam_norm1))
+        norm2 = matplotlib.colors.Normalize(vmin=np.min(gradcam_norm2), vmax=np.max(gradcam_norm2))
+
+        ax[5].set_title("Guided x CAM")
+        ax[5].plot(np.arange(0, len(x[0])), x[0])
+        # ax[5].scatter(np.arange(0, len(x[0])), x[0], color=plt.cm.OrRd(norm1(x[0])), edgecolor='none', alpha=0.5)
+        x_space = np.linspace(0, 128, 257)
+        print(x_space)
+
+        for i in range(128):
+            if i == 0:
+                ax[5].fill_between((x_space[2*i], x_space[2*i+1]), (-1, 1), color=plt.cm.OrRd(norm1(x[0]))[i])
+            elif i == 127:
+                ax[5].fill_between((x_space[2*i], x_space[2*i+1]), (-1, 1), color=plt.cm.OrRd(norm1(x[0]))[i])
+            else:
+                print((x_space[2*i-1], x_space[2*i+2]))
+                ax[5].fill_between((x_space[2*i-1], x_space[2*i+2]), (-1, 1), color=plt.cm.OrRd(norm1(x[0]))[i])
+        ax[5].set_ylabel("Channel 1", fontsize=12, weight="bold")
+        ax[6].plot(np.arange(0, len(x[1])), x[1])
+        # ax[6].scatter(np.arange(0, len(x[1])), x[1], color=plt.cm.OrRd(norm2(x[1])), edgecolor='none', alpha=0.5)
+        ax[6].set_ylabel("Channel 2", fontsize=12, weight="bold")
+        ax[5].xaxis.set_visible(False)
+        ax[5].set_yticks([])
+        ax[6].set_yticks([])
+        plt.tight_layout()
         plt.show()
 
     def get_cam(self, idx):
         grad = self.get_gradient()
-        alpha = torch.sum(grad, dim=3, keepdim=True)
-        alpha = torch.sum(alpha, dim=2, keepdim=True)
+        # print("grad size:", grad.size())
+        alpha = torch.sum(grad, dim=2, keepdim=True)
+        # print("alpha size:", alpha.size())
+        # alpha = torch.sum(alpha, dim=1, keepdim=True)
 
         cam = alpha[idx] * grad[idx]
         cam = torch.sum(cam, dim=0)
         cam = self.normalize_cam(cam)
+        # print("cam size:", cam)
         self.remove_hook()
 
         return cam
@@ -226,38 +290,67 @@ class CNN(nn.Module):
         super(CNN, self).__init__()
         self.input_size = input_size
         self.hidden_dims = hidden_dims
-        self.conv1 = nn.Conv1d(in_channels=2, out_channels=self.hidden_dims[0], kernel_size=kernel_sizes[0], padding=int((kernel_sizes[0]-1)/2))
-        self.conv2 = nn.Conv1d(in_channels=self.hidden_dims[0], out_channels=self.hidden_dims[1], kernel_size=kernel_sizes[1], padding=int((kernel_sizes[1]-1)/2))
-        self.conv3 = nn.Conv1d(in_channels=self.hidden_dims[1], out_channels=self.hidden_dims[2], kernel_size=kernel_sizes[2], padding=int((kernel_sizes[2]-1)/2))
-        self.max_pool1 = nn.MaxPool1d(2)
-        self.max_pool2 = nn.MaxPool1d(2)
-        self.max_pool3 = nn.MaxPool1d(2)
-        self.avg_pool = nn.AvgPool1d(64)
-        self.bn1 = nn.BatchNorm1d(self.hidden_dims[0])
-        self.bn2 = nn.BatchNorm1d(self.hidden_dims[1])
-        self.bn3 = nn.BatchNorm1d(self.hidden_dims[2])
-        self.flatten = nn.Flatten()
-        self.relu = nn.LeakyReLU(inplace=True)
-        self.fc = nn.Linear(16, 10, bias=True)
+        self.layer = nn.Sequential(
+            nn.Conv1d(in_channels=2, out_channels=self.hidden_dims[0], kernel_size=kernel_sizes[0], padding=int((kernel_sizes[0]-1)/2)),
+            nn.BatchNorm1d(self.hidden_dims[0]),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(in_channels=self.hidden_dims[0], out_channels=self.hidden_dims[1], kernel_size=kernel_sizes[1], padding=int((kernel_sizes[1]-1)/2)),
+            nn.BatchNorm1d(self.hidden_dims[1]),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(in_channels=self.hidden_dims[1], out_channels=self.hidden_dims[2], kernel_size=kernel_sizes[2], padding=int((kernel_sizes[2]-1)/2)),
+            nn.BatchNorm1d(self.hidden_dims[2]),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.AvgPool2d((64, 1))
+        )
+        self.fc_layer = nn.Linear(16, 10, bias=True)
 
     def forward(self, x):
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
-        out = self.max_pool1(out)
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out = self.relu(out)
-        out = self.max_pool2(out)
-        out = self.conv3(out)
-        out = self.bn3(out)
-        out = self.relu(out)
-        out = self.max_pool3(out)
-        # print(out.size())
-        out = self.avg_pool(out.transpose(1,2))
-        out = self.flatten(out)
-        out = self.fc(out.squeeze(1))
+        out = self.layer(x)
+        out = self.fc_layer(out.squeeze(1))
         return out
+
+
+# class CNN(nn.Module):
+#     """Convolutional Neural Networks"""
+#     def __init__(self, input_size, hidden_dims, kernel_sizes):
+#         super(CNN, self).__init__()
+#         self.input_size = input_size
+#         self.hidden_dims = hidden_dims
+#         self.conv1 = nn.Conv1d(in_channels=2, out_channels=self.hidden_dims[0], kernel_size=kernel_sizes[0], padding=int((kernel_sizes[0]-1)/2))
+#         self.bn1 = nn.BatchNorm1d(self.hidden_dims[0])
+#         self.max_pool1 = nn.MaxPool1d(2)
+#         self.conv2 = nn.Conv1d(in_channels=self.hidden_dims[0], out_channels=self.hidden_dims[1], kernel_size=kernel_sizes[1], padding=int((kernel_sizes[1]-1)/2))
+#         self.bn2 = nn.BatchNorm1d(self.hidden_dims[1])
+#         self.max_pool2 = nn.MaxPool1d(2)
+#         self.conv3 = nn.Conv1d(in_channels=self.hidden_dims[1], out_channels=self.hidden_dims[2], kernel_size=kernel_sizes[2], padding=int((kernel_sizes[2]-1)/2))
+#         self.bn3 = nn.BatchNorm1d(self.hidden_dims[2])
+#         self.max_pool3 = nn.MaxPool1d(2)
+#         self.avg_pool = nn.AvgPool1d(64)
+#         self.flatten = nn.Flatten()
+#         self.fc = nn.Linear(16, 10, bias=True)
+#         self.relu = nn.ReLU()
+#
+#     def forward(self, x):
+#         out = self.conv1(x)
+#         out = self.bn1(out)
+#         out = self.relu(out)
+#         out = self.max_pool1(out)
+#         out = self.conv2(out)
+#         out = self.bn2(out)
+#         out = self.relu(out)
+#         out = self.max_pool2(out)
+#         out = self.conv3(out)
+#         out = self.bn3(out)
+#         out = self.relu(out)
+#         out = self.max_pool3(out)
+#         # print(out.size())
+#         out = self.avg_pool(out.transpose(1,2))
+#         out = self.flatten(out)
+#         out = self.fc(out.squeeze(1))
+#         return out
 
 
 class Conv_LSTM(nn.Module):

@@ -2,6 +2,7 @@ import json
 import glob
 import os
 import pickle
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.linalg import norm
@@ -102,6 +103,28 @@ def get_figure_plotly(sample_normal, sample_abnormal, sr, sequence_normal, seque
 
 
 if __name__ == "__main__":
+
+    np.random.seed(0)
+    x = np.arange(12)
+    y = np.random.rand(len(x)) * 51
+    c = np.random.rand(len(x)) * 3 + 1.5
+
+    df = pd.DataFrame({"x": x, "y": y, "c": c})
+
+    cmap = plt.cm.bwr
+    norm = matplotlib.colors.Normalize(vmin=1, vmax=5)
+    print(norm(df.c.values))
+
+    fig, ax = plt.subplots()
+    ax.bar(df.x, df.y, color=cmap(norm(df.c.values)))
+    ax.set_xticks(df.x)
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])  # only needed for matplotlib < 3.1
+    fig.colorbar(sm)
+
+    plt.show()
+    quit()
 
     history = [108.5, 107.7, 106.8, 107.2, 106.2, 105.5, 105.0, 105.6, 105.2, 104.3, 104.9, 104.8,
                104.1, 103.1, 103.2, 102.8, 103.6, 103.7, 103.2, 101.9, 102.1, 101.2, 101.0, 100.7,
