@@ -91,7 +91,13 @@ class CAM():
         self.h = self.model.model.layer[-1].register_backward_hook(self.save_gradient)
 
     def save_gradient(self, *args):
-        grad_input = args[1]
+        # print(len(args))
+        # print(args[0])
+        # print(len(args[1]), args[1][0].size())
+        # print(args[2][0])
+        # print(len(args[2]), args[2][0].size())
+        # quit()
+        # grad_input = args[1]
         grad_output = args[2]
         self.gradient.append(grad_output[0])
 
@@ -164,15 +170,22 @@ class CAM():
 
         for i in range(128):
             if i == 0:
-                ax[5].fill_between((x_space[2*i], x_space[2*i+1]), (-1, 1), color=plt.cm.OrRd(norm1(x[0]))[i])
+                ax[5].axvspan(x_space[2*i], x_space[2*i+1], color=plt.cm.bwr(norm1(x[0]))[i], alpha=0.8, linestyle=None, lw=0)
             elif i == 127:
-                ax[5].fill_between((x_space[2*i], x_space[2*i+1]), (-1, 1), color=plt.cm.OrRd(norm1(x[0]))[i])
+                ax[5].axvspan(x_space[2*i], x_space[2*i+1], color=plt.cm.bwr(norm1(x[0]))[i], alpha=0.8, linestyle=None, lw=0)
             else:
-                print((x_space[2*i-1], x_space[2*i+2]))
-                ax[5].fill_between((x_space[2*i-1], x_space[2*i+2]), (-1, 1), color=plt.cm.OrRd(norm1(x[0]))[i])
+                ax[5].axvspan(x_space[2*i-1], x_space[2*i+1], color=plt.cm.bwr(norm1(x[0]))[i], alpha=0.8, linestyle=None, lw=0)
         ax[5].set_ylabel("Channel 1", fontsize=12, weight="bold")
         ax[6].plot(np.arange(0, len(x[1])), x[1])
         # ax[6].scatter(np.arange(0, len(x[1])), x[1], color=plt.cm.OrRd(norm2(x[1])), edgecolor='none', alpha=0.5)
+        for i in range(128):
+            if i == 0:
+                ax[6].axvspan(x_space[2*i], x_space[2*i+1], color=plt.cm.bwr(norm2(x[1]))[i], alpha=0.8, linestyle=None, lw=0)
+            elif i == 127:
+                ax[6].axvspan(x_space[2*i], x_space[2*i+1], color=plt.cm.bwr(norm2(x[1]))[i], alpha=0.8, linestyle=None, lw=0)
+            else:
+                ax[6].axvspan(x_space[2*i-1], x_space[2*i+1], color=plt.cm.bwr(norm2(x[1]))[i], alpha=0.8, linestyle=None, lw=0)
+
         ax[6].set_ylabel("Channel 2", fontsize=12, weight="bold")
         ax[5].xaxis.set_visible(False)
         ax[5].set_yticks([])
@@ -302,14 +315,16 @@ class CNN(nn.Module):
             nn.Conv1d(in_channels=self.hidden_dims[1], out_channels=self.hidden_dims[2], kernel_size=kernel_sizes[2], padding=int((kernel_sizes[2]-1)/2)),
             nn.BatchNorm1d(self.hidden_dims[2]),
             nn.ReLU(),
-            nn.MaxPool1d(2),
-            nn.AvgPool2d((64, 1))
+            nn.MaxPool1d(2)
         )
-        self.fc_layer = nn.Linear(16, 10, bias=True)
+        self.avg_pool = nn.AvgPool2d((64, 1))
+        self.fc_layer = nn.Linear(16, 10)
 
     def forward(self, x):
-        out = self.layer(x)
-        out = self.fc_layer(out.squeeze(1))
+        features = self.layer(x)
+        out = self.avg_pool(features)
+        out = out.view(features.size(0), -1)
+        out = self.fc_layer(out)
         return out
 
 

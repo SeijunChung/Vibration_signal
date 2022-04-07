@@ -212,7 +212,7 @@ def classification(args):
 
                 if curr_f1_score > best_f1_score:
                     best_f1_score = curr_f1_score
-                    torch.save(model.state_dict(), os.path.join(args.weights_path, f'Best_{model.__class__.__name__}_model_4th.pkl'))
+                    torch.save(model.state_dict(), os.path.join(args.weights_path, f'Best_{model.__class__.__name__}_model_5th.pkl'))
 
                     print("Best model is saved!\n")
                     best_val_improv = 0
@@ -224,7 +224,7 @@ def classification(args):
     elif args.mode == 'test':
         pred_tests = []
         # Load the Model Weight #
-        model.load_state_dict(torch.load(os.path.join(args.weights_path, f'Best_{model.__class__.__name__}_model_4th.pkl')))
+        model.load_state_dict(torch.load(os.path.join(args.weights_path, f'Best_{model.__class__.__name__}_model_5th.pkl')))
         label = pd.read_csv(args.data_path + "result_test_classification.csv", index_col=False)
 
         inferenceset = np.load(args.data_path + "test/inference_set_classification.npy")

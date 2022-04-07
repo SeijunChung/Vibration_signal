@@ -162,7 +162,7 @@ elif mode == "gradcam":
     train_loader, val_loader = data_loader(train_x, train_y, train_split, batch_size, "train", classes)
 
     # Load weights saved #
-    model.load_state_dict(torch.load(os.path.join(weights_path, f'Best_{model.__class__.__name__}_model_4th.pkl')))
+    model.load_state_dict(torch.load(os.path.join(weights_path, f'Best_{model.__class__.__name__}_model_5th.pkl')))
 
     # for m in model.modules():
     #     print(m)
